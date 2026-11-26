@@ -10,22 +10,21 @@
 
 
 namespace archivo {
-Texto input(){
-    const char* RUTA_ENTRADA = RUTA_INOUT "entrada.txt";
-    return Leer_archivo(RUTA_ENTRADA);
-}
+    Texto input(){
+        const char* RUTA_ENTRADA = RUTA_INOUT "entrada.txt";
+        return Leer_archivo(RUTA_ENTRADA);
+    }
 
 
-bool output_comprimido_rle(Texto& t){
-    const char* RUTA_COMPRIMIDO_RLE = RUTA_INOUT "comprimido-rle.txt";
-    return Escribir_archivo(RUTA_COMPRIMIDO_RLE, t);
-}
+    bool output_comprimido_rle(Texto& t){
+        const char* RUTA_COMPRIMIDO_RLE = RUTA_INOUT "comprimido-rle.txt";
+        return Escribir_archivo(RUTA_COMPRIMIDO_RLE, t);
+    }
 
-bool output_comprimido_lz78(Texto& t){
-    const char* RUTA_COMPRIMIDO_LZ78 = RUTA_INOUT "comprimido-lz78.txt";
-    return Escribir_archivo(RUTA_COMPRIMIDO_LZ78, t);
-}
-
+    bool output_comprimido_lz78(Texto& t){
+        const char* RUTA_COMPRIMIDO_LZ78 = RUTA_INOUT "comprimido-lz78.txt";
+        return Escribir_archivo(RUTA_COMPRIMIDO_LZ78, t);
+    }
 }
 
 

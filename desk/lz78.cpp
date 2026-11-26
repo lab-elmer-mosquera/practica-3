@@ -57,178 +57,178 @@ struct DiccionarioLz78 {
 
 namespace LZ78 {
 
-// ---------- Funciones auxiliares ----------
+    // ---------- Funciones auxiliares ----------
 
-static void escribir_indice(Abstracto& salida, uint32_t indice) {
-    for (int i = 0; i < 4; i++) {
-        salida.agregar_byte(indice % 256);
-        indice /= 256;
-    }
-}
-
-static uint32_t leer_indice(const Abstracto& entrada, size_t& pos) {
-    if (entrada.longitud - pos < 4) {
-        throw std::runtime_error("Indice incompleto");
+    static void escribir_indice(Abstracto& salida, uint32_t indice) {
+        for (int i = 0; i < 4; i++) {
+            salida.agregar_byte(indice % 256);
+            indice /= 256;
+        }
     }
 
-    uint32_t indice = 0;
+    static uint32_t leer_indice(const Abstracto& entrada, size_t& pos) {
+        if (entrada.longitud - pos < 4) {
+            throw std::runtime_error("Indice incompleto");
+        }
 
-    for (int i = 0; i < 4; i++) {
-        indice |= uint32_t(entrada.datos[pos++]) << (i * 8);
+        uint32_t indice = 0;
+
+        for (int i = 0; i < 4; i++) {
+            indice |= uint32_t(entrada.datos[pos++]) << (i * 8);
+        }
+
+        return indice;
     }
 
-    return indice;
-}
+    static void emitir_cadena(
+        const DiccionarioLz78& diccionario,
+        Texto& salida,
+        unsigned int indice
+        ) {
+        if (indice == 0) {
+            return;
+        }
 
-static void emitir_cadena(
-    const DiccionarioLz78& diccionario,
-    Texto& salida,
-    unsigned int indice
-    ) {
-    if (indice == 0) {
-        return;
+        if (indice > diccionario.longitud) {
+            throw std::runtime_error("Indice invalido");
+        }
+
+        Par par = diccionario.datos[indice - 1];
+
+        emitir_cadena(diccionario, salida, par.padre);
+
+        salida.agregar_caracter(char(par.caracter));
     }
 
-    if (indice > diccionario.longitud) {
-        throw std::runtime_error("Indice invalido");
-    }
+    // ---------- Compresion ----------
 
-    Par par = diccionario.datos[indice - 1];
+    void comprimir(const Texto& entrada, Abstracto& salida) {
+        salida.limpiar();
 
-    emitir_cadena(diccionario, salida, par.padre);
+        DiccionarioLz78 diccionario;
+        unsigned int padre = 0;
 
-    salida.agregar_caracter(char(par.caracter));
-}
+        for (size_t i = 0; i < entrada.longitud; i++) {
+            unsigned char c = entrada.datos[i];
 
-// ---------- Compresion ----------
+            unsigned int indice = diccionario.buscar(padre, c);
 
-void comprimir(const Texto& entrada, Abstracto& salida) {
-    salida.limpiar();
+            if (indice != 0) {
+                padre = indice;
+            } else {
+                salida.agregar_byte(1);
+                escribir_indice(salida, padre);
+                salida.agregar_byte(c);
 
-    DiccionarioLz78 diccionario;
-    unsigned int padre = 0;
+                diccionario.agregar({padre, c});
 
-    for (size_t i = 0; i < entrada.longitud; i++) {
-        unsigned char c = entrada.datos[i];
+                padre = 0;
+            }
+        }
 
-        unsigned int indice = diccionario.buscar(padre, c);
-
-        if (indice != 0) {
-            padre = indice;
-        } else {
-            salida.agregar_byte(1);
+        if (padre != 0) {
+            salida.agregar_byte(2);
             escribir_indice(salida, padre);
-            salida.agregar_byte(c);
-
-            diccionario.agregar({padre, c});
-
-            padre = 0;
         }
+
+        salida.agregar_byte(0);
     }
 
-    if (padre != 0) {
-        salida.agregar_byte(2);
-        escribir_indice(salida, padre);
-    }
+    // ---------- Descompresion ----------
 
-    salida.agregar_byte(0);
-}
+    void descomprimir(const Abstracto& entrada, Texto& salida) {
+        salida.limpiar();
 
-// ---------- Descompresion ----------
+        DiccionarioLz78 diccionario;
+        size_t pos = 0;
 
-void descomprimir(const Abstracto& entrada, Texto& salida) {
-    salida.limpiar();
+        while (pos < entrada.longitud) {
+            unsigned char tipo = entrada.datos[pos++];
 
-    DiccionarioLz78 diccionario;
-    size_t pos = 0;
-
-    while (pos < entrada.longitud) {
-        unsigned char tipo = entrada.datos[pos++];
-
-        if (tipo == 0) {
-            break;
-        }
-
-        if (tipo != 1 && tipo != 2) {
-            throw std::runtime_error("Tipo invalido");
-        }
-
-        unsigned int padre = leer_indice(entrada, pos);
-
-        emitir_cadena(diccionario, salida, padre);
-
-        if (tipo == 1) {
-            if (pos >= entrada.longitud) {
-                throw std::runtime_error("Caracter faltante");
+            if (tipo == 0) {
+                break;
             }
 
-            unsigned char c = entrada.datos[pos++];
+            if (tipo != 1 && tipo != 2) {
+                throw std::runtime_error("Tipo invalido");
+            }
 
+            unsigned int padre = leer_indice(entrada, pos);
+
+            emitir_cadena(diccionario, salida, padre);
+
+            if (tipo == 1) {
+                if (pos >= entrada.longitud) {
+                    throw std::runtime_error("Caracter faltante");
+                }
+
+                unsigned char c = entrada.datos[pos++];
+
+                salida.agregar_caracter(char(c));
+
+                diccionario.agregar({padre, c});
+            }
+        }
+    }
+
+    // ---------- Representacion textual ----------
+
+    static void agregar_texto(Texto& salida, const std::string& texto) {
+        for (char c : texto) {
+            salida.agregar_caracter(c);
+        }
+    }
+
+    static void escribir_caracter(Texto& salida, unsigned char c) {
+        if (c == ',' || c == '(' || c == ')' || c == '\\' || c == '-') {
+            salida.agregar_caracter('\\');
             salida.agregar_caracter(char(c));
-
-            diccionario.agregar({padre, c});
+        } else if (c >= 32 && c < 127) {
+            salida.agregar_caracter(char(c));
+        } else {
+            agregar_texto(salida, std::format("\\x{:02X}", unsigned(c)));
         }
     }
-}
 
-// ---------- Representacion textual ----------
+    Texto ComprimidoLz78_a_texto(const Abstracto& comp) {
+        Texto salida;
+        size_t pos = 0;
 
-static void agregar_texto(Texto& salida, const std::string& texto) {
-    for (char c : texto) {
-        salida.agregar_caracter(c);
-    }
-}
+        while (pos < comp.longitud) {
+            unsigned char tipo = comp.datos[pos++];
 
-static void escribir_caracter(Texto& salida, unsigned char c) {
-    if (c == ',' || c == '(' || c == ')' || c == '\\' || c == '-') {
-        salida.agregar_caracter('\\');
-        salida.agregar_caracter(char(c));
-    } else if (c >= 32 && c < 127) {
-        salida.agregar_caracter(char(c));
-    } else {
-        agregar_texto(salida, std::format("\\x{:02X}", unsigned(c)));
-    }
-}
-
-Texto ComprimidoLz78_a_texto(const Abstracto& comp) {
-    Texto salida;
-    size_t pos = 0;
-
-    while (pos < comp.longitud) {
-        unsigned char tipo = comp.datos[pos++];
-
-        if (tipo == 0) {
-            break;
-        }
-
-        if (tipo != 1 && tipo != 2) {
-            throw std::runtime_error("Tipo invalido");
-        }
-
-        unsigned int padre = leer_indice(comp, pos);
-
-        if (salida.longitud > 0) {
-            salida.agregar_caracter(',');
-        }
-
-        salida.agregar_caracter('(');
-        agregar_texto(salida, std::to_string(padre));
-        salida.agregar_caracter(',');
-
-        if (tipo == 1) {
-            if (pos >= comp.longitud) {
-                throw std::runtime_error("Caracter faltante");
+            if (tipo == 0) {
+                break;
             }
 
-            escribir_caracter(salida, comp.datos[pos++]);
-        } else {
-            salida.agregar_caracter('-');
+            if (tipo != 1 && tipo != 2) {
+                throw std::runtime_error("Tipo invalido");
+            }
+
+            unsigned int padre = leer_indice(comp, pos);
+
+            if (salida.longitud > 0) {
+                salida.agregar_caracter(',');
+            }
+
+            salida.agregar_caracter('(');
+            agregar_texto(salida, std::to_string(padre));
+            salida.agregar_caracter(',');
+
+            if (tipo == 1) {
+                if (pos >= comp.longitud) {
+                    throw std::runtime_error("Caracter faltante");
+                }
+
+                escribir_caracter(salida, comp.datos[pos++]);
+            } else {
+                salida.agregar_caracter('-');
+            }
+
+            salida.agregar_caracter(')');
         }
 
-        salida.agregar_caracter(')');
+        return salida;
     }
-
-    return salida;
-}
 
 }

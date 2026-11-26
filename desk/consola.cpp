@@ -22,7 +22,7 @@ bool texto_a_int(const Texto& t, int& valor) {
     long long acc = 0;
     for (size_t i = ini; i < fin; ++i) {
         char c = t.datos[i];
-        if (!es_digito(c)) return false;          // hay algo que no es dígito
+        if (!es_digito(c)) return false;          // hay algo que no es digito
         acc = acc * 10 + (c - '0');
         if (acc > 2147483647LL) return false;     // no cabe en int
     }
@@ -32,63 +32,63 @@ bool texto_a_int(const Texto& t, int& valor) {
 
 namespace consola {
 
-void limpiar_buffer_entrada() {
-    // std::cin.clear();
-    // if (std::cin.rdbuf()->in_avail() > 0) {
-    //     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    // }
-    std::cin.clear();
-    int c;
-    while ((c = std::cin.get()) != '\n' && c != EOF) {
-        // vaciar hasta el salto de línea
-    }
-}
-
-void pausar() {
-    std::cout << "Presione Enter para continuar...";
-    std::cin.get();
-}
-
-void limpiar_pantalla() {
-    std::cout << "\033[2J\033[1;1H";
-}
-
-Texto input() {
-    Texto t;
-    char c;
-    while (std::cin.get(c)) {
-        if (c == '\n') break;
-        t.agregar_caracter(c);
-    }
-    return t;
-}
-
-int input_int_rango(int min, int max) {
-    if (min > max)
-        throw std::invalid_argument("input_int_rango: min > max");
-
-    for (int intento = 0; intento < 5; ++intento) {
-        std::cout << "\n>> ";
-        Texto linea = input();
-        int valor;
-        if (texto_a_int(linea, valor) && valor >= min && valor <= max)
-            return valor;
-
-        std::cout << "entrada invalida"
-                     "\nINTENTO:"
-                  << intento+1 << "/5" << std::endl;
+    void limpiar_buffer_entrada() {
+        // std::cin.clear();
+        // if (std::cin.rdbuf()->in_avail() > 0) {
+        //     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        // }
+        std::cin.clear();
+        int c;
+        while ((c = std::cin.get()) != '\n' && c != EOF) {
+            // vaciar hasta el salto de línea
+        }
     }
 
-    std::cout << "Limite de intentos alcanzado" << std::endl;
-    exit(EXIT_FAILURE);
-}
-
-void println_hex(Abstracto& base){
-    cout << "  hex:  ";
-    for (size_t i = 0; i < base.longitud; ++i) {
-        std::print("{:02X} ", base.datos[i]);
+    void pausar() {
+        std::cout << "Presione Enter para continuar...";
+        std::cin.get();
     }
-    cout<<endl;
-}
+
+    void limpiar_pantalla() {
+        std::cout << "\033[2J\033[1;1H";
+    }
+
+    Texto input() {
+        Texto t;
+        char c;
+        while (std::cin.get(c)) {
+            if (c == '\n') break;
+            t.agregar_caracter(c);
+        }
+        return t;
+    }
+
+    int input_int_rango(int min, int max) {
+        if (min > max)
+            throw std::invalid_argument("input_int_rango: min > max");
+
+        for (int intento = 0; intento < 5; ++intento) {
+            std::cout << "\n>> ";
+            Texto linea = input();
+            int valor;
+            if (texto_a_int(linea, valor) && valor >= min && valor <= max)
+                return valor;
+
+            std::cout << "entrada invalida"
+                         "\nINTENTO:"
+                      << intento+1 << "/5" << std::endl;
+        }
+
+        std::cout << "Limite de intentos alcanzado" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    void println_hex(Abstracto& base){
+        cout << "  hex:  ";
+        for (size_t i = 0; i < base.longitud; ++i) {
+            std::print("{:02X} ", base.datos[i]);
+        }
+        cout<<endl;
+    }
 
 }
