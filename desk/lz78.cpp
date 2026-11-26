@@ -1,212 +1,234 @@
 #include "lz78.h"
-#include <print>
+#include <cstdint>
+#include <string>
+#include <format>
+#include <stdexcept>
 
-using std::println;
+// ---------- Diccionario ----------
 
-// ---------- estructuras internas ----------
 struct Par {
-    unsigned int  padre;
+    unsigned int padre;
     unsigned char caracter;
 };
 
 struct DiccionarioLz78 {
-    Par* datos{nullptr};
-    size_t longitud{};
-    size_t capacidad{};
+    size_t longitud = 0;
+    size_t capacidad = 32;
+    Par* datos = new Par[capacidad];
 
-    DiccionarioLz78() {
-        capacidad = 32;
-        longitud  = 0;
-        datos = new Par[capacidad];
-    }
+    DiccionarioLz78() = default;
+
     DiccionarioLz78(const DiccionarioLz78&) = delete;
+
     DiccionarioLz78& operator=(const DiccionarioLz78&) = delete;
 
-    DiccionarioLz78(DiccionarioLz78&& o) noexcept
-        : datos(o.datos), longitud(o.longitud), capacidad(o.capacidad) {
-        o.datos = nullptr; o.longitud = 0; o.capacidad = 0;
-    }
-    DiccionarioLz78& operator=(DiccionarioLz78&& o) noexcept {
-        if (this != &o) {
-            delete[] datos;
-            datos = o.datos; longitud = o.longitud; capacidad = o.capacidad;
-            o.datos = nullptr; o.longitud = 0; o.capacidad = 0;
-        }
-        return *this;
-    }
-    ~DiccionarioLz78() { delete[] datos; }
-
-    void limpiar() { longitud = 0; }
-
-    void reservar(size_t n) {
-        if (n <= capacidad) return;
-        while (capacidad < n) capacidad *= 2;
-        Par* nuevo = new Par[capacidad];
-        for (size_t i = 0; i < longitud; ++i) nuevo[i] = datos[i];
+    ~DiccionarioLz78() {
         delete[] datos;
-        datos = nuevo;
     }
 
-    void agregar_par(Par par) {
-        reservar(longitud + 1);
+    void agregar(Par par) {
+        if (longitud == capacidad) {
+            capacidad *= 2;
+
+            Par* nuevo = new Par[capacidad];
+
+            for (size_t i = 0; i < longitud; i++) {
+                nuevo[i] = datos[i];
+            }
+
+            delete[] datos;
+            datos = nuevo;
+        }
+
         datos[longitud++] = par;
+    }
+
+    unsigned int buscar(unsigned int padre, unsigned char c) {
+        for (size_t i = 0; i < longitud; i++) {
+            if (datos[i].padre == padre &&
+                datos[i].caracter == c) {
+                return i + 1;
+            }
+        }
+
+        return 0;
     }
 };
 
 namespace LZ78 {
 
-// helpers internos
+// ---------- Funciones auxiliares ----------
 
-static void escribir_varint(Abstracto& out, unsigned int v) {
-    while (v >= 0x80) {
-        out.agregar_byte((unsigned char)((v & 0x7F) | 0x80));
-        v >>= 7;
+static void escribir_indice(Abstracto& salida, uint32_t indice) {
+    for (int i = 0; i < 4; i++) {
+        salida.agregar_byte(indice % 256);
+        indice /= 256;
     }
-    out.agregar_byte((unsigned char)v);
 }
 
-static unsigned int leer_varint(const Abstracto& in, size_t& pos) {
-    unsigned int v = 0; int shift = 0;
-    while (pos < in.longitud) {
-        unsigned char b = in.datos[pos++];
-        v |= (unsigned int)(b & 0x7F) << shift;
-        if (!(b & 0x80)) break;
-        shift += 7;
+static uint32_t leer_indice(const Abstracto& entrada, size_t& pos) {
+    if (entrada.longitud - pos < 4) {
+        throw std::runtime_error("Indice incompleto");
     }
-    return v;
+
+    uint32_t indice = 0;
+
+    for (int i = 0; i < 4; i++) {
+        indice |= uint32_t(entrada.datos[pos++]) << (i * 8);
+    }
+
+    return indice;
 }
 
-static int buscar_hijo(const DiccionarioLz78& dict, unsigned int padre, unsigned char c) {
-    for (size_t i = 0; i < dict.longitud; ++i)
-        if (dict.datos[i].padre == padre && dict.datos[i].caracter == c)
-            return (int)(i + 1);
-    return 0;
+static void emitir_cadena(
+    const DiccionarioLz78& diccionario,
+    Texto& salida,
+    unsigned int indice
+    ) {
+    if (indice == 0) {
+        return;
+    }
+
+    if (indice > diccionario.longitud) {
+        throw std::runtime_error("Indice invalido");
+    }
+
+    Par par = diccionario.datos[indice - 1];
+
+    emitir_cadena(diccionario, salida, par.padre);
+
+    salida.agregar_caracter(char(par.caracter));
 }
 
-static void emitir_cadena(const DiccionarioLz78& dict, Texto& out, unsigned int id) {
-    if (id == 0) return;
-    emitir_cadena(dict, out, dict.datos[id - 1].padre);
-    out.agregar_caracter((char)dict.datos[id - 1].caracter);
-}
-
-// API publica
+// ---------- Compresion ----------
 
 void comprimir(const Texto& entrada, Abstracto& salida) {
     salida.limpiar();
-    DiccionarioLz78 dict;
 
-    size_t pos = 0;
-    while (pos < entrada.longitud) {
-        unsigned int nodo = 0;
-        size_t p = pos;
+    DiccionarioLz78 diccionario;
+    unsigned int padre = 0;
 
-        while (p < entrada.longitud) {
-            unsigned char c = (unsigned char)entrada.datos[p];
-            int hijo = buscar_hijo(dict, nodo, c);
-            if (hijo == 0) break;
-            nodo = (unsigned int)hijo;
-            ++p;
-        }
+    for (size_t i = 0; i < entrada.longitud; i++) {
+        unsigned char c = entrada.datos[i];
 
-        if (p < entrada.longitud) {
-            unsigned char c = (unsigned char)entrada.datos[p];
-            salida.agregar_byte(1);
-            escribir_varint(salida, nodo);
-            salida.agregar_byte(c);
-            dict.agregar_par({nodo, c});
-            pos = p + 1;
+        unsigned int indice = diccionario.buscar(padre, c);
+
+        if (indice != 0) {
+            padre = indice;
         } else {
-            salida.agregar_byte(2);
-            escribir_varint(salida, nodo);
-            pos = p;
+            salida.agregar_byte(1);
+            escribir_indice(salida, padre);
+            salida.agregar_byte(c);
+
+            diccionario.agregar({padre, c});
+
+            padre = 0;
         }
     }
+
+    if (padre != 0) {
+        salida.agregar_byte(2);
+        escribir_indice(salida, padre);
+    }
+
     salida.agregar_byte(0);
 }
 
+// ---------- Descompresion ----------
+
 void descomprimir(const Abstracto& entrada, Texto& salida) {
     salida.limpiar();
-    DiccionarioLz78 dict;
 
+    DiccionarioLz78 diccionario;
     size_t pos = 0;
+
     while (pos < entrada.longitud) {
         unsigned char tipo = entrada.datos[pos++];
-        if (tipo == 0) break;
 
-        unsigned int padre = leer_varint(entrada, pos);
+        if (tipo == 0) {
+            break;
+        }
+
+        if (tipo != 1 && tipo != 2) {
+            throw std::runtime_error("Tipo invalido");
+        }
+
+        unsigned int padre = leer_indice(entrada, pos);
+
+        emitir_cadena(diccionario, salida, padre);
 
         if (tipo == 1) {
-            if (pos >= entrada.longitud) break;
+            if (pos >= entrada.longitud) {
+                throw std::runtime_error("Caracter faltante");
+            }
+
             unsigned char c = entrada.datos[pos++];
-            emitir_cadena(dict, salida, padre);
-            salida.agregar_caracter((char)c);
-            dict.agregar_par({padre, c});
-        } else if (tipo == 2) {
-            emitir_cadena(dict, salida, padre);
+
+            salida.agregar_caracter(char(c));
+
+            diccionario.agregar({padre, c});
         }
+    }
+}
+
+// ---------- Representacion textual ----------
+
+static void agregar_texto(Texto& salida, const std::string& texto) {
+    for (char c : texto) {
+        salida.agregar_caracter(c);
+    }
+}
+
+static void escribir_caracter(Texto& salida, unsigned char c) {
+    if (c == ',' || c == '(' || c == ')' || c == '\\' || c == '-') {
+        salida.agregar_caracter('\\');
+        salida.agregar_caracter(char(c));
+    } else if (c >= 32 && c < 127) {
+        salida.agregar_caracter(char(c));
+    } else {
+        agregar_texto(salida, std::format("\\x{:02X}", unsigned(c)));
     }
 }
 
 Texto ComprimidoLz78_a_texto(const Abstracto& comp) {
-    // --- helpers locales (sólo aquí se usan) ---
-    auto escribir_uint = [](Texto& t, unsigned int v) {
-        char buf[16]; int n = 0;
-        if (v == 0) buf[n++] = '0';
-        else while (v) { buf[n++] = char('0' + v % 10); v /= 10; }
-        while (n) t.agregar_caracter(buf[--n]);
-    };
-
-    auto escribir_caracter = [](Texto& t, unsigned char c) {
-        static const char hex[] = "0123456789ABCDEF";
-        switch (c) {
-        case ',':  t.agregar_caracter('\\'); t.agregar_caracter(',');  return;
-        case '(':  t.agregar_caracter('\\'); t.agregar_caracter('(');  return;
-        case ')':  t.agregar_caracter('\\'); t.agregar_caracter(')');  return;
-        case '\\': t.agregar_caracter('\\'); t.agregar_caracter('\\'); return;
-        default:
-            if (c >= 32 && c < 127) t.agregar_caracter((char)c);
-            else {
-                t.agregar_caracter('\\');
-                t.agregar_caracter('x');
-                t.agregar_caracter(hex[c >> 4]);
-                t.agregar_caracter(hex[c & 0xF]);
-            }
-        }
-    };
-
-    // --- recorrido del flujo binario ---
-    Texto out;
+    Texto salida;
     size_t pos = 0;
-    bool primero = true;
 
     while (pos < comp.longitud) {
         unsigned char tipo = comp.datos[pos++];
-        if (tipo == 0) break;
 
-        unsigned int padre = leer_varint(comp, pos);
+        if (tipo == 0) {
+            break;
+        }
 
-        if (!primero) out.agregar_caracter(',');
-        primero = false;
+        if (tipo != 1 && tipo != 2) {
+            throw std::runtime_error("Tipo invalido");
+        }
 
-        out.agregar_caracter('(');
-        escribir_uint(out, padre);
-        out.agregar_caracter(',');
+        unsigned int padre = leer_indice(comp, pos);
+
+        if (salida.longitud > 0) {
+            salida.agregar_caracter(',');
+        }
+
+        salida.agregar_caracter('(');
+        agregar_texto(salida, std::to_string(padre));
+        salida.agregar_caracter(',');
 
         if (tipo == 1) {
-            if (pos >= comp.longitud) break;
-            escribir_caracter(out, comp.datos[pos++]);
-        } else if (tipo == 2) {
-            out.agregar_caracter('-');
-            // out.agregar_caracter('E');
-            // out.agregar_caracter('O');
-            // out.agregar_caracter('F');
+            if (pos >= comp.longitud) {
+                throw std::runtime_error("Caracter faltante");
+            }
+
+            escribir_caracter(salida, comp.datos[pos++]);
         } else {
-            out.agregar_caracter('?');
+            salida.agregar_caracter('-');
         }
-        out.agregar_caracter(')');
+
+        salida.agregar_caracter(')');
     }
 
-    return out;
+    return salida;
 }
 
 }

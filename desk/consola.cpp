@@ -12,7 +12,7 @@ using std::endl;
 static bool es_digito(char c) { return c >= '0' && c <= '9'; }
 
 bool texto_a_int(const Texto& t, int& valor) {
-    // Ignorar '\r' (Windows) y espacios al inicio/fin si quieres ser tolerante
+    // Ignorar '\r' (Windows) y espacios al iniciofin
     size_t ini = 0, fin = t.longitud;
     while (ini < fin && (t.datos[ini] == ' ' || t.datos[ini] == '\t' || t.datos[ini] == '\r')) ++ini;
     while (fin > ini && (t.datos[fin-1] == ' ' || t.datos[fin-1] == '\t' || t.datos[fin-1] == '\r')) --fin;
@@ -69,7 +69,7 @@ int input_int_rango(int min, int max) {
 
     for (int intento = 0; intento < 5; ++intento) {
         std::cout << "\n>> ";
-        Texto linea = input();          // lee la línea entera, consume el '\n'
+        Texto linea = input();
         int valor;
         if (texto_a_int(linea, valor) && valor >= min && valor <= max)
             return valor;
@@ -77,7 +77,6 @@ int input_int_rango(int min, int max) {
         std::cout << "entrada invalida"
                      "\nINTENTO:"
                   << intento+1 << "/5" << std::endl;
-        // ya NO hace falta limpiar_buffer_entrada(): input() se comió el '\n'
     }
 
     std::cout << "Limite de intentos alcanzado" << std::endl;
